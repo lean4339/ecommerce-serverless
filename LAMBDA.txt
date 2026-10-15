@@ -1,0 +1,22 @@
+EMPEZÁ POR ACÁ
+
+Once funciones Lambda para la tienda, incluyendo login y registro propios.
+
+1. api/src/functions/auth.ts: signup, login, logout y sesión contra PostgreSQL.
+2. api/src/shared/passwords.ts: hash scrypt y verificación de contraseña.
+3. api/src/shared/sessions.ts: cookie, vencimiento y revocación de sesión.
+4. api/src/shared/http.ts: cada Lambda exige una sesión válida antes de atender.
+5. api/src/functions/create-order.ts: confirmar pedido, reservar stock y reintentos.
+6. deploy/lambda/template.yaml: API Gateway, once roles y logs separados.
+7. README.md: arquitectura y recorrido de una compra.
+
+npm run demo              Tienda local y PostgreSQL desechable. Creá tu cuenta.
+npm test                  Pruebas de auth, aislamiento y compras.
+npm run check             ESLint, Prettier y TypeScript.
+npm run package:lambda    Once ZIP independientes, sin deploy.
+npm run deploy:lambda     Publicar funciones y tienda HTTPS en AWS Ohio.
+
+Login con email y contraseña de nuestra base; IAM da permisos internos a las Lambdas.
+Sin Cognito. La base de Singapur usa un rol SQL y un túnel SSH dedicados.
+Las credenciales se leen desde Secrets Manager; cada función escribe en CloudWatch.
+deploy/lambda/outputs.json contiene la URL del despliegue cuando termina.

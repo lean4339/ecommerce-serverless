@@ -1,0 +1,14 @@
+node_modules/
+dist/
+frontend/dist/
+backups/
+coverage/
+exports/
+playwright-report/
+test-results/
+package-lock.json
+.env
+.env.*
+deploy/secrets/
+# La plantilla se genera con scripts/generate-template.mjs.
+deploy/lambda/template.yaml

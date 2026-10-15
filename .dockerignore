@@ -1,0 +1,9 @@
+node_modules
+.git
+.env
+*.sql.gz
+exports
+dist
+frontend/dist
+playwright-report
+test-results
