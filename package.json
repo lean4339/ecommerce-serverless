@@ -26,7 +26,9 @@
     "format": "prettier . --write",
     "format:check": "prettier . --check",
     "check": "npm run lint && npm run format:check && npm run build && npm run check:ui",
-    "test:dynamo": "DYNAMO_ENDPOINT=${DYNAMO_ENDPOINT:-http://127.0.0.1:8000} node --import tsx --test api/test/dynamo.test.ts"
+    "test:dynamo": "DYNAMO_ENDPOINT=${DYNAMO_ENDPOINT:-http://127.0.0.1:8000} node --import tsx --test api/test/dynamo.test.ts",
+    "e2e": "npm run build && npm run build:ui && E2E_LOCAL=1 playwright test",
+    "e2e:smoke": "playwright test --grep @smoke"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.1152.0",
