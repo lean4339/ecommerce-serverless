@@ -46,3 +46,17 @@ jobs:
           else
             echo "::notice::sql/ no está en el repo: se omiten los tests de PostgreSQL"
           fi
+      - name: Navegador para E2E
+        run: npx playwright install --with-deps chromium
+      - name: E2E (Playwright) contra stack local (DynamoDB Local + API local + UI)
+        run: npm run e2e
+        env:
+          CI: 'true'
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

@@ -97,3 +97,12 @@ jobs:
           aws s3 cp frontend/dist/index.html "s3://$bucket/index.html" \
             --content-type text/html --cache-control no-cache
           aws cloudfront create-invalidation --distribution-id "$dist" --paths / /index.html
+      - name: Navegador para smoke E2E
+        run: npx playwright install --with-deps chromium
+      - name: Smoke E2E contra producción (~1 req/s, cuenta desechable)
+        env:
+          E2E_BASE_URL: ${{ vars.STORE_URL }}
+          CI: 'true'
+        run: |
+          [ -n "$E2E_BASE_URL" ] || { echo "::error::Falta la variable STORE_URL"; exit 1; }
+          npm run e2e:smoke
