@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Lint, build y tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      dynamodb:
+        image: amazon/dynamodb-local:latest
+        ports:
+          - 8000:8000
+    env:
+      DYNAMO_ENDPOINT: http://127.0.0.1:8000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run build
+      - run: npm run check:ui
+      - name: Plantilla SAM generada y válida
+        run: |
+          node scripts/generate-template.mjs
+          pipx run --spec aws-sam-cli sam validate --lint -t deploy/lambda/template.yaml --region us-east-2
+      - name: Tests en modo DynamoDB (DynamoDB Local)
+        run: npm run test:dynamo
+      # Los tests de PostgreSQL (npm test) necesitan sql/006-storefront.sql y sql/007-auth.sql,
+      # que están en .gitignore. Se ejecutan solo si esos archivos llegan al repositorio.
+      - name: Tests PostgreSQL (si sql/ está versionado)
+        run: |
+          if [ -f sql/006-storefront.sql ] && [ -f sql/007-auth.sql ]; then
+            npm test
+          else
+            echo "::notice::sql/ no está en el repo: se omiten los tests de PostgreSQL"
+          fi

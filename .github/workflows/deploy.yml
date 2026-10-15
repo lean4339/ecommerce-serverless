@@ -1,0 +1,99 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Un solo deploy a la vez; un push nuevo espera al anterior en vez de cancelarlo.
+concurrency:
+  group: deploy-nexo-lab
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: SAM deploy (nexo-lab, us-east-2)
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    permissions:
+      contents: read
+      id-token: write # OIDC
+    env:
+      STACK_NAME: nexo-lab
+      AWS_REGION: us-east-2
+      SAM_CLI_TELEMETRY: '0'
+      AWS_PAGER: ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+      - name: Verificar configuración
+        env:
+          ROLE: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          SECRET_ARN: ${{ secrets.DATABASE_SECRET_ARN }}
+          APP_ORIGIN: ${{ vars.APP_ORIGIN }}
+        run: |
+          for v in ROLE SECRET_ARN APP_ORIGIN; do
+            [ -n "${!v}" ] || { echo "::error::Falta $v (secrets AWS_DEPLOY_ROLE_ARN / DATABASE_SECRET_ARN, variable APP_ORIGIN)"; exit 1; }
+          done
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-2
+          role-session-name: github-deploy-${{ github.run_id }}
+      - run: npm ci
+      # El proyecto empaqueta cada Lambda con esbuild (11 ZIP en dist/functions) y la plantilla
+      # apunta a esos ZIP; por eso se usa package:lambda en lugar de `sam build`.
+      - run: npm run package:lambda
+      - run: npm run build:ui
+      - name: Crear changeset (sin ejecutar)
+        id: changeset
+        env:
+          SECRET_ARN: ${{ secrets.DATABASE_SECRET_ARN }}
+          APP_ORIGIN: ${{ vars.APP_ORIGIN }}
+        run: |
+          set -o pipefail
+          sam deploy \
+            --template-file deploy/lambda/template.yaml \
+            --stack-name "$STACK_NAME" --region "$AWS_REGION" \
+            --resolve-s3 --capabilities CAPABILITY_IAM \
+            --no-execute-changeset --no-fail-on-empty-changeset \
+            --parameter-overrides "DataBackend=dynamo" "DatabaseSecretArn=$SECRET_ARN" "AppOrigin=$APP_ORIGIN" \
+            | tee sam-deploy.log
+          arn=$(grep -oE 'arn:aws:cloudformation:[^ ]+:changeSet/[^ ]+' sam-deploy.log | tail -1 || true)
+          echo "arn=$arn" >> "$GITHUB_OUTPUT"
+      - name: Seguridad - sin Remove ni Replacement en NexoTable (ni Remove en ningún recurso)
+        if: steps.changeset.outputs.arn != ''
+        env:
+          ARN: ${{ steps.changeset.outputs.arn }}
+        run: node scripts/ci/check-changeset.mjs "$ARN"
+      - name: Ejecutar changeset
+        if: steps.changeset.outputs.arn != ''
+        env:
+          ARN: ${{ steps.changeset.outputs.arn }}
+        run: |
+          aws cloudformation execute-change-set --change-set-name "$ARN"
+          aws cloudformation wait stack-update-complete --stack-name "$STACK_NAME"
+      - name: Publicar frontend (S3 + invalidación CloudFront)
+        run: |
+          out() { aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+            --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text; }
+          bucket=$(out FrontendBucketName); dist=$(out DistributionId)
+          aws s3 sync frontend/dist/ "s3://$bucket/" --exclude index.html \
+            --cache-control public,max-age=31536000,immutable
+          aws s3 cp frontend/dist/index.html "s3://$bucket/index.html" \
+            --content-type text/html --cache-control no-cache
+          aws cloudfront create-invalidation --distribution-id "$dist" --paths / /index.html
