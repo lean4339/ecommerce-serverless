@@ -31,22 +31,22 @@ flowchart LR
 
 ## 🧠 Modelo de datos (single-table)
 
-| Entidad | PK | SK |
-|---|---|---|
-| Producto | `PRODUCT#<id>` | `META` |
-| Por categoría (GSI1) | `CAT#<id>` | `PRODUCT#<name>` |
-| Catálogo popular (GSI2) | `CATALOG` | `<ventas invertidas>#<id>` |
-| Sesiones / rate limit | con **TTL** | autolimpieza |
+| Entidad                 | PK             | SK                         |
+| ----------------------- | -------------- | -------------------------- |
+| Producto                | `PRODUCT#<id>` | `META`                     |
+| Por categoría (GSI1)    | `CAT#<id>`     | `PRODUCT#<name>`           |
+| Catálogo popular (GSI2) | `CATALOG`      | `<ventas invertidas>#<id>` |
+| Sesiones / rate limit   | con **TTL**    | autolimpieza               |
 
 > ✍️ Órdenes y signup con `TransactWriteItems`. Carrito con versión optimista.
 
 ## 🔥 La saga del N+1
 
-| | Antes | Después |
-|---|---|---|
-| `list-products` p50 | 473 ms | **21 ms** |
-| Peor caso | 13.5 s 💀 | **1.4 s** |
-| Sockets saturados | sí | **0** |
+|                     | Antes     | Después   |
+| ------------------- | --------- | --------- |
+| `list-products` p50 | 473 ms    | **21 ms** |
+| Peor caso           | 13.5 s 💀 | **1.4 s** |
+| Sockets saturados   | sí        | **0**     |
 
 ~250 queries en paralelo por categoría ➜ **una Query paginada sobre GSI2**.
 
